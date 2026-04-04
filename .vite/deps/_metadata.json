@@ -1,0 +1,38 @@
+{
+  "hash": "bcc6c22d",
+  "configHash": "af92573c",
+  "lockfileHash": "336f41f1",
+  "browserHash": "4ec33f7f",
+  "optimized": {
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "c3c9a8f8",
+      "needsInterop": true
+    },
+    "react-force-graph-3d": {
+      "src": "../../node_modules/react-force-graph-3d/dist/react-force-graph-3d.mjs",
+      "file": "react-force-graph-3d.js",
+      "fileHash": "a894635e",
+      "needsInterop": false
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "d2ddf067",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "1eba1f1f",
+      "needsInterop": true
+    }
+  },
+  "chunks": {
+    "react-TUYU05Ph": {
+      "file": "react-TUYU05Ph.js",
+      "isDynamicEntry": false
+    }
+  }
+}

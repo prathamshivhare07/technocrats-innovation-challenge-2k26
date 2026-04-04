@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export function CommandCenter({ onOpenGraph }) {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,10 +11,10 @@ export function CommandCenter({ onOpenGraph }) {
       try {
         // Fetch all the different analytical patterns we built!
         const [layeringRes, circularRes, structuringRes, flaggedRes] = await Promise.all([
-          fetch('http://localhost:8000/api/detect/layering'),
-          fetch('http://localhost:8000/api/detect/circular'),
-          fetch('http://localhost:8000/api/detect/structuring'),
-          fetch('http://localhost:8000/api/detect/flagged')
+          fetch(`${API_URL}/api/detect/layering`),
+          fetch(`${API_URL}/api/detect/circular`),
+          fetch(`${API_URL}/api/detect/structuring`),
+          fetch(`${API_URL}/api/detect/flagged`)
         ]);
 
         const layering = await layeringRes.json();
@@ -84,7 +86,7 @@ export function CommandCenter({ onOpenGraph }) {
              const confirmed = window.confirm("Are you sure you want to VANISH the entire Graph Database? This action cannot be undone.");
              if (!confirmed) return;
              try {
-                 const res = await fetch("http://localhost:8000/api/clear", { method: "DELETE" });
+                 const res = await fetch(`${API_URL}/api/clear`, { method: "DELETE" });
                  if (res.ok) {
                      alert("Database successfully vanished! You can now upload a new CSV.");
                      window.location.reload(); 
@@ -147,7 +149,7 @@ export function CommandCenter({ onOpenGraph }) {
                 const formData = new FormData();
                 formData.append("file", file);
                 try {
-                  const res = await fetch("http://localhost:8000/api/upload-csv", { method: "POST", body: formData });
+                  const res = await fetch(`${API_URL}/api/upload-csv`, { method: "POST", body: formData });
                   if (res.ok) {
                     const data = await res.json();
                     e.currentTarget.querySelector('p').innerText = `Success! ${data.message}`;

@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 export function GraphWorkspace({ initialFocusNode }) {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [alerts, setAlerts] = useState([]);
@@ -45,16 +47,16 @@ export function GraphWorkspace({ initialFocusNode }) {
 
   const fetchAllData = () => {
     // Load Neo4j graph nodes and edges
-    fetch('http://localhost:8000/api/graph')
+    fetch(`${API_URL}/api/graph`)
       .then(res => res.json())
       .then(data => setGraphData(data))
       .catch(console.error);
       
     // Load ML detected patterns
     Promise.all([
-      fetch('http://localhost:8000/api/detect/layering').then(r => r.json()),
-      fetch('http://localhost:8000/api/detect/circular').then(r => r.json()),
-      fetch('http://localhost:8000/api/detect/structuring').then(r => r.json())
+      fetch(`${API_URL}/api/detect/layering`).then(r => r.json()),
+      fetch(`${API_URL}/api/detect/circular`).then(r => r.json()),
+      fetch(`${API_URL}/api/detect/structuring`).then(r => r.json())
     ]).then(([layering, circular, structuring]) => {
       const formattedAlerts = [];
       const dNodes = new Set();
@@ -213,7 +215,7 @@ export function GraphWorkspace({ initialFocusNode }) {
     setChatInput('');
     
     try {
-      const res = await fetch('http://localhost:8000/api/chat', {
+      const res = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
