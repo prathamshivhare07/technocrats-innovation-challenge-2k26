@@ -5,6 +5,11 @@ from neo4j import GraphDatabase
 from analytics import detect_round_tripping, detect_layering, detect_structuring
 import csv
 import codecs
+from pydantic import BaseModel
+from chat_bot import handle_chat_message
+
+class ChatRequest(BaseModel):
+    message: str
 
 app = FastAPI(title="Fraud Detection API")
 
@@ -115,6 +120,17 @@ def get_layering_flows():
 def get_structuring_flows():
     return detect_structuring()
 
+@app.get("/api/detect/flagged")
+def get_flagged_flows():
+    query = """
+    MATCH (a:Account)-[r:TRANSFERRED_TO {is_suspicious: true}]->(b:Account)
+    RETURN a.id AS source, b.id AS destination, r.amount AS amount, r.transaction_id AS tx_id
+    LIMIT 50
+    """
+    with driver.session() as session:
+        result = session.run(query)
+        return [{"source": row["source"], "destination": row["destination"], "amount": row["amount"]} for row in result]
+
 @app.post("/api/upload-csv")
 async def upload_csv(file: UploadFile = File(...)):
     csvReader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
@@ -150,6 +166,20 @@ async def upload_csv(file: UploadFile = File(...)):
         session.execute_write(batch_insert, results)
         
     return {"message": f"Successfully ingested {len(results)} records.", "success": True}
+
+@app.delete("/api/clear")
+def clear_db():
+    query = "MATCH (n) DETACH DELETE n"
+    try:
+        with driver.session() as session:
+            session.run(query)
+        return {"message": "Database wiped successfully.", "success": True}
+    except Exception as e:
+        return {"message": str(e), "success": False}
+
+@app.post("/api/chat")
+async def chat_interaction(req: ChatRequest):
+    return handle_chat_message(req.message)
 
 if __name__ == "__main__":
     import uvicorn

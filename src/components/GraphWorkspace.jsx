@@ -9,6 +9,15 @@ export function GraphWorkspace({ initialFocusNode }) {
   const [selectedNode, setSelectedNode] = useState(null);
   const [isFocusMode, setIsFocusMode] = useState(false);
   
+  // Chatbot State
+  const [chatMessages, setChatMessages] = useState([{ sender: 'bot', text: 'Hello! Ask me to find the biggest transactions, count total nodes, or show flagged accounts.' }]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatOpen, setIsChatOpen] = useState(true);
+  
+  // Search State
+  const [searchInput, setSearchInput] = useState('');
+  const [targetFlashText, setTargetFlashText] = useState(null);
+  
   const displayGraphData = React.useMemo(() => {
     if (!isFocusMode || !graphData.nodes.length) return graphData;
 
@@ -34,14 +43,14 @@ export function GraphWorkspace({ initialFocusNode }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => {
+  const fetchAllData = () => {
     // Load Neo4j graph nodes and edges
     fetch('http://localhost:8000/api/graph')
       .then(res => res.json())
       .then(data => setGraphData(data))
       .catch(console.error);
       
-    // Load ML detected patterns (like CommandCenter) to list as single alerts
+    // Load ML detected patterns
     Promise.all([
       fetch('http://localhost:8000/api/detect/layering').then(r => r.json()),
       fetch('http://localhost:8000/api/detect/circular').then(r => r.json()),
@@ -91,6 +100,10 @@ export function GraphWorkspace({ initialFocusNode }) {
       setDetectedNodes(dNodes);
       setDetectedEdges(dEdges);
     }).catch(console.error);
+  };
+
+  useEffect(() => {
+    fetchAllData();
   }, []);
 
   const handleNodeClick = (node) => {
@@ -112,6 +125,22 @@ export function GraphWorkspace({ initialFocusNode }) {
   const handleAlertClick = (rootNodeId) => {
     const node = graphData.nodes.find(n => n.id === rootNodeId);
     if (node) handleNodeClick(node);
+  };
+
+  const handleSearch = () => {
+    if (!searchInput.trim()) return;
+    const term = searchInput.trim().toLowerCase();
+    const node = graphData.nodes.find(n => n.id.toLowerCase() === term);
+    
+    if (node) {
+      handleNodeClick(node);
+      setTargetFlashText(`Navigating to Node: ${node.id}`);
+      setTimeout(() => setTargetFlashText(null), 3000);
+      setSearchInput('');
+    } else {
+      setTargetFlashText(`Error: Node "${searchInput}" not found!`);
+      setTimeout(() => setTargetFlashText(null), 3000);
+    }
   };
 
   useEffect(() => {
@@ -173,23 +202,138 @@ export function GraphWorkspace({ initialFocusNode }) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleSendChatMessage = async () => {
+    if (!chatInput.trim()) return;
+    
+    const userMessage = { sender: 'user', text: chatInput };
+    setChatMessages(prev => [...prev, userMessage]);
+    setChatInput('');
+    
+    try {
+      const res = await fetch('http://localhost:8000/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message: userMessage.text })
+      });
+      
+      const data = await res.json();
+      
+      // Auto focus on the first node returned by the bot
+      if (data.nodes && data.nodes.length > 0) {
+        setDetectedNodes(prev => new Set([...prev, ...data.nodes]));
+        const firstNodeId = data.nodes[0];
+        // Focus click after small timeout
+        setTimeout(() => handleAlertClick(firstNodeId), 300);
+      }
+      
+      setChatMessages(prev => [...prev, { sender: 'bot', text: data.text }]);
+    } catch (e) {
+      setChatMessages(prev => [...prev, { sender: 'bot', text: 'Sorry, I lost connection to the backend.' }]);
+    }
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', flex: 1, backgroundColor: 'var(--background)', height: '100vh', overflow: 'hidden' }}>
       {/* Main Graph Area */}
       <div style={{ width: `${graphWidth}px`, position: 'relative', height: '100%', borderRight: '1px solid var(--surface-highest)', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: 'var(--spacing-6)', left: 'var(--spacing-6)', zIndex: 10 }}>
-          <h1 className="headline-md">Graph Investigation</h1>
-          <div className="label-sm" style={{ marginBottom: 'var(--spacing-4)' }}>Live Neo4j Sync</div>
-          <button 
-             className={isFocusMode ? "btn-primary" : "btn-secondary"} 
-             onClick={() => setIsFocusMode(!isFocusMode)}
-             style={{ fontSize: '0.8rem', padding: 'var(--spacing-2) var(--spacing-4)' }}
-          >
-             {isFocusMode ? "Show Full Network" : "Focus Suspicious Nodes"}
-          </button>
+        <div style={{ 
+            position: 'absolute', top: 'var(--spacing-6)', left: 'var(--spacing-6)', zIndex: 10,
+            background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.95))',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: '20px',
+            padding: 'var(--spacing-6)',
+            boxShadow: '0 15px 50px rgba(0, 0, 0, 0.7)',
+            width: '340px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--spacing-5)'
+          }}>
+          
+          <div>
+            <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, background: 'linear-gradient(90deg, #60a5fa, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.5px' }}>Graph Control</h1>
+            <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', backgroundColor: '#4ade80', borderRadius: '50%', boxShadow: '0 0 12px #4ade80' }}></span>
+              Live Neo4j Sync
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '10px' }}>
+             <div style={{ flex: 1, padding: '8px 12px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600, color: '#f8fafc', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ color: '#94a3b8', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Nodes</span>
+                <span style={{ color: '#60a5fa', fontSize: '1.2rem' }}>{graphData.nodes.length}</span>
+             </div>
+             <div style={{ flex: 1, padding: '8px 12px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600, color: '#f8fafc', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ color: '#94a3b8', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Edges</span>
+                <span style={{ color: '#a78bfa', fontSize: '1.2rem' }}>{graphData.links.length}</span>
+             </div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '8px' }}>
+             <input 
+               type="text" 
+               placeholder="Search Node ID..." 
+               value={searchInput} 
+               onChange={e => setSearchInput(e.target.value)} 
+               onKeyDown={e => e.key === 'Enter' && handleSearch()}
+               style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '12px 14px', outline: 'none', transition: 'all 0.2s', fontSize: '0.9rem' }} 
+               onFocus={e => e.target.style.borderColor = '#60a5fa'}
+               onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+             />
+             <button 
+                onClick={handleSearch} 
+                style={{ padding: '0 20px', borderRadius: '10px', background: 'rgba(96, 165, 250, 0.1)', color: '#60a5fa', border: '1px solid rgba(96, 165, 250, 0.3)', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                onMouseOver={e => { e.currentTarget.style.background = '#60a5fa'; e.currentTarget.style.color = '#fff'; }}
+                onMouseOut={e => { e.currentTarget.style.background = 'rgba(96, 165, 250, 0.1)'; e.currentTarget.style.color = '#60a5fa'; }}
+             >
+                Find
+             </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+            <button 
+               onClick={() => setIsFocusMode(!isFocusMode)}
+               style={{ 
+                 fontSize: '0.9rem', padding: '12px', borderRadius: '10px', width: '100%', display: 'flex', justifyContent: 'center', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                 background: isFocusMode ? 'linear-gradient(90deg, #f43f5e, #e11d48)' : 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+                 color: 'white', border: 'none', boxShadow: isFocusMode ? '0 4px 15px rgba(225, 29, 72, 0.4)' : '0 4px 15px rgba(139, 92, 246, 0.4)'
+               }}
+               onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+               onMouseOut={e => e.currentTarget.style.transform = 'none'}
+            >
+               {isFocusMode ? "⊝ Show Full Network" : "🎯 Focus Suspicious Nodes"}
+            </button>
+            <button 
+               onClick={fetchAllData}
+               style={{ 
+                 fontSize: '0.9rem', padding: '12px', borderRadius: '10px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px',
+                 background: 'rgba(255,255,255,0.03)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.1)', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s'
+               }}
+               onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff'; }}
+               onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = '#cbd5e1'; }}
+            >
+               🔄 Refresh Graph Data
+            </button>
+          </div>
         </div>
+        
+        {targetFlashText && (
+          <div style={{
+            position: 'absolute', top: '10%', left: '50%', transform: 'translateX(-50%)',
+            backgroundColor: 'var(--surface-high)', color: 'var(--on-surface)',
+            padding: 'var(--spacing-4) var(--spacing-8)', borderRadius: '100px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 100, fontSize: '1.2rem', fontWeight: 600,
+            border: '1px solid var(--primary)'
+          }}>
+            {targetFlashText}
+          </div>
+        )}
         
         {/* Constrained 3D Canvas */}
         <div style={{ width: '100%', height: '100%', backgroundColor: 'var(--surface-lowest)' }}>
@@ -211,76 +355,142 @@ export function GraphWorkspace({ initialFocusNode }) {
             onNodeClick={handleNodeClick}
             nodeRelSize={6}
             linkWidth={1}
-            d3AlphaDecay={0.01}
-            d3VelocityDecay={0.1}
+            d3AlphaDecay={0.06}
+            d3VelocityDecay={0.6}
           />
+
+          {/* Floating Chat Window overlay */}
+          {isChatOpen && (
+            <div style={{ position: 'absolute', bottom: 'var(--spacing-6)', right: 'var(--spacing-6)', width: '350px', height: '400px', backgroundColor: 'var(--surface-low)', border: '1px solid var(--outline-variant)', borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+               {/* Header */}
+               <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--spacing-3)', fontWeight: 600, borderBottom: '1px solid var(--outline-variant)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Graph Assistant</span>
+                  <button onClick={() => setIsChatOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--on-surface-variant)', cursor: 'pointer' }}>✖</button>
+               </div>
+               
+               {/* Messages */}
+               <div style={{ flex: 1, padding: 'var(--spacing-3)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
+                  {chatMessages.map((msg, i) => (
+                    <div key={i} style={{ alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                      <div className="label-sm" style={{ marginBottom: '2px', color: 'var(--on-surface-variant)', textAlign: msg.sender === 'user' ? 'right' : 'left' }}>{msg.sender === 'user' ? 'You' : 'Bot'}</div>
+                      <div style={{ backgroundColor: msg.sender === 'user' ? 'var(--primary)' : 'var(--surface-high)', color: msg.sender === 'user' ? 'var(--on-primary)' : 'var(--on-surface)', padding: 'var(--spacing-3)', borderRadius: '8px', whiteSpace: 'pre-line', fontSize: '0.9rem' }}>
+                         {msg.text}
+                      </div>
+                    </div>
+                  ))}
+               </div>
+
+               {/* Input */}
+               <div style={{ padding: 'var(--spacing-3)', backgroundColor: 'var(--surface)', borderTop: '1px solid var(--outline-variant)', display: 'flex', gap: 'var(--spacing-2)' }}>
+                  <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendChatMessage()} placeholder="Ask something..." style={{ flex: 1, backgroundColor: 'var(--surface-lowest)', color: 'var(--on-surface)', border: '1px solid var(--outline-variant)', borderRadius: '6px', padding: 'var(--spacing-2)' }} />
+                  <button onClick={handleSendChatMessage} className="btn-primary" style={{ padding: '0 var(--spacing-4)' }}>Send</button>
+               </div>
+            </div>
+          )}
+          
+          {/* Chat Bubble Toggle Button (if closed) */}
+          {!isChatOpen && (
+             <button onClick={() => setIsChatOpen(true)} className="btn-primary" style={{ position: 'absolute', bottom: 'var(--spacing-6)', right: 'var(--spacing-6)', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+                💬
+             </button>
+          )}
+
         </div>
       </div>
 
       {/* Sidebar Details & Alerts */}
-      <div className="flex-col" style={{ flex: 'none', width: '300px', minWidth: '300px', height: '100%', backgroundColor: 'var(--surface-low)', padding: 'var(--spacing-6)', overflowY: 'auto' }}>
+      <div className="flex-col" style={{ flex: 'none', width: '320px', minWidth: '320px', height: '100%', backgroundColor: 'rgba(15, 15, 20, 0.65)', padding: 'var(--spacing-6)', overflowY: 'auto', borderLeft: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
         
         {/* LIVE ALERTS SECTION */}
-        <h2 className="headline-md" style={{ marginBottom: 'var(--spacing-4)', color: 'var(--error)' }}>Live Alerts</h2>
-        <div className="card" style={{ marginBottom: 'var(--spacing-6)', maxHeight: '40vh', overflowY: 'auto', padding: 'var(--spacing-2)', border: '1px solid var(--error)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: 'var(--spacing-4)' }}>
+          <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#ef4444', borderRadius: '50%', boxShadow: '0 0 10px #ef4444' }}></span>
+          <h2 className="headline-md" style={{ color: '#f8fafc', margin: 0 }}>Live Alerts Stream</h2>
+        </div>
+
+        <div style={{ marginBottom: 'var(--spacing-6)', maxHeight: '40vh', overflowY: 'auto', padding: 'var(--spacing-2)', background: 'rgba(30, 41, 59, 0.4)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '12px' }}>
           {alerts.length === 0 ? (
-            <div style={{ color: 'var(--on-surface-variant)', textAlign: 'center', padding: 'var(--spacing-4)' }}>Tracking patterns...</div>
+            <div style={{ color: '#64748b', textAlign: 'center', padding: 'var(--spacing-4)' }}>Tracking patterns...</div>
           ) : (
             alerts.map(alert => (
               <div 
                  key={alert.id} 
                  onClick={() => handleAlertClick(alert.rootNode)}
                  style={{ 
-                   padding: 'var(--spacing-3)', 
-                   borderBottom: '1px solid var(--surface-highest)',
+                   padding: '12px 16px', 
+                   borderBottom: '1px solid rgba(255,255,255,0.05)',
                    cursor: 'pointer',
-                   transition: 'background 0.2s'
+                   transition: 'all 0.2s',
+                   borderRadius: '8px'
                  }}
-                 onMouseOver={e => e.currentTarget.style.backgroundColor = 'var(--surface)'}
-                 onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                 onMouseOver={e => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.transform = 'translateX(4px)'; }}
+                 onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.transform = 'none'; }}
               >
-                <div style={{ fontWeight: 600, color: 'var(--on-surface)' }}>{alert.type}</div>
-                <div className="body-sm" style={{ color: 'var(--error)' }}>{alert.summary}</div>
+                <div style={{ fontWeight: 600, color: '#f1f5f9', fontSize: '0.9rem' }}>{alert.type}</div>
+                <div className="body-sm" style={{ color: '#ef4444', marginTop: '4px' }}>{alert.summary}</div>
               </div>
             ))
           )}
         </div>
 
         {/* NODE DETAILS SECTION */}
-        <h2 className="headline-md" style={{ marginBottom: 'var(--spacing-6)' }}>Node Details</h2>
+        <h2 className="headline-md" style={{ marginBottom: 'var(--spacing-4)', color: '#f8fafc' }}>Investigation Target</h2>
         
         {selectedNode ? (
           <>
-            <div className="card" style={{ marginBottom: 'var(--spacing-6)' }}>
-              <div className="label-sm">Selected Entity ID</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{selectedNode.id}</div>
+            <div style={{ 
+              background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9))', 
+              border: '1px solid rgba(255,255,255,0.1)', 
+              borderRadius: '12px', 
+              padding: '16px',
+              marginBottom: 'var(--spacing-4)',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
+            }}>
+              <div style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Selected Entity ID</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#60a5fa', wordBreak: 'break-all' }}>{selectedNode.id}</div>
               
+              <div style={{ marginTop: '12px' }}>
               {selectedNode.kyc_status === 'Flagged' ? (
-                 <span className="badge-critical" style={{ marginTop: 'var(--spacing-2)', alignSelf: 'flex-start' }}>Flagged Entity</span>
+                 <span style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'inline-block' }}>⚠️ Flagged Entity</span>
               ) : (
-                 <span className="badge-info" style={{ marginTop: 'var(--spacing-2)', alignSelf: 'flex-start' }}>{selectedNode.kyc_status || 'Verified'} {selectedNode.type}</span>
+                 <span style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, backgroundColor: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', display: 'inline-block' }}>✓ {selectedNode.kyc_status || 'Verified'} {selectedNode.type}</span>
               )}
+              </div>
             </div>
 
-            <div className="card" style={{ marginBottom: 'var(--spacing-6)' }}>
-              <div className="label-sm" style={{ marginBottom: 'var(--spacing-2)' }}>Profile Assessment</div>
-              <div className="body-sm" style={{ color: 'var(--on-surface-variant)' }}>
+            <div style={{ 
+              background: 'rgba(30, 41, 59, 0.4)', 
+              border: '1px solid rgba(255,255,255,0.05)', 
+              borderRadius: '12px', 
+              padding: '16px',
+              marginBottom: 'var(--spacing-6)'
+            }}>
+              <div style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Profile Assessment</div>
+              <div className="body-sm" style={{ color: '#cbd5e1' }}>
                 Comparing declared monthly volume against algorithmic traversal throughput.
               </div>
             </div>
 
             <div style={{ marginTop: 'auto' }}>
-              <button className="btn-primary" style={{ width: '100%', padding: 'var(--spacing-4)' }} onClick={generateFIUPackage}>
-                Generate FIU Evidence Package
+              <button 
+                onClick={generateFIUPackage}
+                style={{ 
+                  width: '100%', padding: '14px', background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)', 
+                  border: 'none', borderRadius: '12px', color: 'white', fontWeight: 700, fontSize: '1rem',
+                  cursor: 'pointer', boxShadow: '0 4px 15px rgba(139, 92, 246, 0.4)', transition: 'all 0.2s',
+                  display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px'
+                }}
+                onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                onMouseOut={e => e.currentTarget.style.transform = 'none'}
+              >
+                📄 Generate FIU Evidence Package
               </button>
             </div>
           </>
         ) : (
-          <div style={{ color: 'var(--on-surface-variant)', textAlign: 'center', marginTop: 'var(--spacing-8)' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', textAlign: 'center', background: 'rgba(30, 41, 59, 0.2)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px', padding: '20px' }}>
             Click an alert or select a node in the graph to view details.
           </div>
         )}
-
       </div>
     </div>
   );
